@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Semáforo Inteligente</title>
+    <!-- Inclui Tailwind CSS CDN para estilização -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Define a fonte Inter para todo o corpo */
+        body {
+            font-family: "Inter", sans-serif;
+        }
+        /* Estilos básicos para a luz do semáforo */
+        .luz {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%; /* Faz a luz ser um círculo */
+            background-color: #4b5563; /* Cor padrão para luz apagada (cinza escuro) */
+            border: 3px solid #1f2937; /* Borda mais escura */
+            transition: background-color 0.3s ease, box-shadow 0.3s ease; /* Transição suave para acender/apagar */
+        }
+        /* Estilos para a luz vermelha ativa */
+        .luz.vermelha.active {
+            background-color: #ef4444; /* Vermelho vibrante */
+            box-shadow: 0 0 25px #ef4444; /* Sombra que simula o brilho */
+        }
+        /* Estilos para a luz amarela ativa */
+        .luz.amarela.active {
+            background-color: #f59e0b; /* Amarelo vibrante */
+            box-shadow: 0 0 25px #f59e0b; /* Sombra que simula o brilho */
+        }
+        /* Estilos para a luz verde ativa */
+        .luz.verde.active {
+            background-color: #22c55e; /* Verde vibrante */
+            box-shadow: 0 0 25px #22c55e; /* Sombra que simula o brilho */
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl shadow-xl text-white text-center w-full max-w-sm md:max-w-md lg:max-w-lg">
+        <h1 class="text-3xl font-bold mb-6">SEMÁFORO INTELIGENTE</h1>
+
+        <div class="flex flex-col items-center space-y-4 mb-6">
+            <!-- Luz Vermelha -->
+            <div id="luzVermelha" class="luz"></div>
+            <!-- Luz Amarela -->
+            <div id="luzAmarela" class="luz"></div>
+            <!-- Luz Verde -->
+            <div id="luzVerde" class="luz"></div>
+        </div>
+
+        <button id="botaoPedestre" class="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg transition-all duration-300 transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 mb-6">
+            PEDIR PARA ATRAVESSAR
+        </button>
+
+        <p class="text-2xl mb-2">Contagem: <span id="contador" class="font-extrabold text-yellow-400">00</span> s</p>
+        <p class="text-xl">Status: <span id="status" class="font-semibold text-green-400">Carros Seguindo</span></p>
+    </div>
+
+    <script>
+        // Garante que o script só seja executado depois que o DOM estiver completamente carregado
+        document.addEventListener('DOMContentLoaded', () => {
+            // Seleção dos elementos HTML
+            const luzVermelha = document.getElementById('luzVermelha');
+            const luzAmarela = document.getElementById('luzAmarela');
+            const luzVerde = document.getElementById('luzVerde');
+            const botaoPedestre = document.getElementById('botaoPedestre');
+            const contadorElemento = document.getElementById('contador');
+            const statusElemento = document.getElementById('status');
+
+            // Variáveis de estado do semáforo
+            let faseAtual = 'verde'; // 'verde', 'amarelo', 'vermelho'
+            let tempoRestante = 0;
+            let intervaloSemafaro;
+            let pedestrePressionou = false; // Flag para indicar se o pedestre solicitou a travessia
+
+            // Tempos de duração para cada fase do semáforo (em segundos)
+            const temposFase = {
+                verde: 10,       // Duração da luz verde
+                amarelo: 3,      // Duração da luz amarela
+                vermelho: 12,    // Duração da luz vermelha
+                pedestre: 7      // Tempo adicional para travessia de pedestres
+            };
+
+            /**
+             * Função para desativar visualmente todas as luzes do semáforo.
+             */
+            function desativarTodasAsLuzes() {
+                luzVermelha.classList.remove('active');
+                luzAmarela.classList.remove('active');
+                luzVerde.classList.remove('active');
+            }
+
+            /**
+             * Função principal para atualizar o estado do semáforo.
+             * Define qual luz está ativa, o tempo restante e a mensagem de status.
+             */
+            function atualizarSemafaro() {
+                desativarTodasAsLuzes(); // Apaga todas as luzes
+                clearInterval(intervaloSemafaro); // Limpa qualquer temporizador anterior
+
+                switch (faseAtual) {
+                    case 'verde':
+                        luzVerde.classList.add('active'); // Acende a luz verde
+                        statusElemento.textContent = 'Carros Seguindo';
+                        tempoRestante = temposFase.verde;
+                        break;
+                    case 'amarelo':
+                        luzAmarela.classList.add('active'); // Acende a luz amarela
+                        statusElemento.textContent = 'Carros Atenção!';
+                        tempoRestante = temposFase.amarelo;
+                        break;
+                    case 'vermelho':
+                        luzVermelha.classList.add('active'); // Acende a luz vermelha
+                        statusElemento.textContent = 'Carros Parados';
+                        tempoRestante = temposFase.vermelho;
+
+                        // Se o pedestre pressionou o botão, adiciona tempo extra para travessia
+                        if (pedestrePressionou) {
+                            tempoRestante += temposFase.pedestre;
+                            statusElemento.textContent = 'Pedestres Atravessando!'; // Atualiza status para pedestres
+                            botaoPedestre.disabled = true; // Desabilita o botão para evitar múltiplos cliques
+                            pedestrePressionou = false; // Reseta a flag do pedestre
+                        }
+                        break;
+                }
+                iniciarContador(); // Inicia a contagem regressiva para a fase atual
+            }
+
+            /**
+             * Inicia a contagem regressiva para a fase atual do semáforo.
+             */
+            function iniciarContador() {
+                // Formata o tempo restante para ter sempre dois dígitos (ex: 09, 05)
+                contadorElemento.textContent = tempoRestante.toString().padStart(2, '0');
+
+                // Configura um intervalo para decrementar o contador a cada segundo
+                intervaloSemafaro = setInterval(() => {
+                    tempoRestante--; // Decrementa o tempo
+                    contadorElemento.textContent = tempoRestante.toString().padStart(2, '0');
+
+                    // Se o tempo chegou a zero, para o contador e avança para a próxima fase
+                    if (tempoRestante <= 0) {
+                        clearInterval(intervaloSemafaro);
+                        passarParaProximaFase();
+                    }
+                }, 1000); // 1000 milissegundos = 1 segundo
+            }
+
+            /**
+             * Altera a fase atual do semáforo para a próxima na sequência.
+             */
+            function passarParaProximaFase() {
+                switch (faseAtual) {
+                    case 'verde':
+                        faseAtual = 'amarelo';
+                        break;
+                    case 'amarelo':
+                        faseAtual = 'vermelho';
+                        break;
+                    case 'vermelho':
+                        faseAtual = 'verde';
+                        // Habilita o botão de pedestre novamente quando o semáforo volta ao verde
+                        botaoPedestre.disabled = false;
+                        break;
+                }
+                atualizarSemafaro(); // Atualiza o semáforo para a nova fase
+            }
+
+            // Adiciona um ouvinte de evento para o clique no botão de pedestre
+            botaoPedestre.addEventListener('click', () => {
+                // Só permite a solicitação se o semáforo estiver verde ou amarelo
+                if (faseAtual === 'verde' || faseAtual === 'amarelo') {
+                    pedestrePressionou = true; // Define a flag do pedestre como verdadeira
+
+                    // Se estiver verde, força a transição para amarelo imediatamente
+                    if (faseAtual === 'verde') {
+                        clearInterval(intervaloSemafaro); // Para o contador atual do verde
+                        faseAtual = 'amarelo'; // Muda a fase para amarelo
+                        atualizarSemafaro(); // Força a atualização do semáforo
+                    }
+                }
+            });
+
+            // Inicia o semáforo quando a página é carregada
+            atualizarSemafaro();
+        });
+    </script>
+</body>
+</html>
